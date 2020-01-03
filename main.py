@@ -12,27 +12,34 @@ from mtcnn_detector import MtcnnDetector
 from classifier import Resnet20
 import face_preprocess
 from utils import draw_txt_image
+import argparse
 
 reload(sys)
 sys.setdefaultencoding('utf8')
-###################### Settings ########################
-video_path = "/home/fangyu/Downloads/yaoke/avi/yiyi2.avi"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="face recognition system")
+    parser.add_argument('--video_path', type=str, default='./test.avi', help='tested video path')
+    parser.add_argument('--ref_path', type=str, default='./ref_features/r18-arcface-emore/', help='registered images feature path')
+    parser.add_argument('--model_path', type=str, default='./models/r18-arcface-emore/model,1', help='tested model path')
+    parser.add_argument('--model_type', type=str, default='mxnet', help='model type, mxnet or tf')
+    parser.add_argument('--threshold', type=float, default=0.75, help='score threshold')
+    parser.add_argument('--save_video', type=bool, default=False, help='whether to save output video')
+    parser.add_argument('--save_path', type=str, default='./videos/output.avi', help='out video save path')
+
+    args = parser.parse_args()
+    return args
+
+
+args = parse_args()
 # Detection settings
 det_minsize = 90
 det_threshold = [0.6,0.7,0.8]
 mtcnn_path = "./mtcnn-model/"
 # Alignment settings
 img_size = '112,112'
-# Recognition Settings
-ref_path = "/home/fangyu/fy/face_recognition_system/ref_features/v1-arcface-emotion-kd/"
-#model_path = "/home/fangyu/ego_prj/recognition/models/resnet-enhance-20_msceleb1m.pb" 
-model_path = "/home/fangyu/fy/face-recognition-benchmarks/IIM/models/v1-arcface-emotion-kd/model,1"
-model_type = "mxnet"
-#ref_path = "/home/fangyu/fy/face_recognition_system/ref_features/r18-arcface-emotion/"
-threshold = 0.75
-# save video
-save_video = False
-save_path = "test_11.avi"
+
 true_name = "章泉_2442章泉_2444章泉_2443章泉_2441"
 #true_name = "Yue_Jiaxin"
 
@@ -40,17 +47,17 @@ true_name = "章泉_2442章泉_2444章泉_2443章泉_2441"
 ctx = mx.gpu(0)
 detector = MtcnnDetector(model_folder=mtcnn_path, ctx=ctx, num_worker=1, minsize=det_minsize,
                         accurate_landmark=True, threshold=det_threshold)
-recog_classifier = Resnet20(model_path, ref_path, model_type)
-video_capture = cv2.VideoCapture(video_path)
+recog_classifier = Resnet20(args.model_path, args.ref_path, args.model_type)
+video_capture = cv2.VideoCapture(args.video_path)
 det_cnt = 0
 recog_cnt = 0
 error = 0
 
 
-if save_video:
+if args.save_video:
     frame_width = int(video_capture.get(3))
     frame_height = int(video_capture.get(4))
-    out = cv2.VideoWriter(save_path,cv2.VideoWriter_fourcc(*'XVID'), 10, (frame_width,frame_height))
+    out = cv2.VideoWriter(args.save_path,cv2.VideoWriter_fourcc(*'XVID'), 10, (frame_width,frame_height))
 while True:
     ret, frame = video_capture.read()
 
@@ -70,7 +77,7 @@ while True:
                 landmark = points[i].reshape((2,5)).T
                 face = face_preprocess.preprocess(frame, bbox, landmark, image_size=img_size)
                 face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-                recog_ret, score = recog_classifier.get_recog_result(face, threshold)
+                recog_ret, score = recog_classifier.get_recog_result(face,args.threshold)
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])),
                             (255,0,0), 2)
                 #if recog_ret is not None and recog_ret == "Yue_Jiaxin":
@@ -90,7 +97,7 @@ while True:
                 #for j in range(len(landmark)/2):
                     #cv2.circle(frame, (int(landmark[j]), int(landmark[j+5])), 5, (0,255,255))
         
-        if save_video:
+        if args.save_video:
             out.write(frame)
         cv2.imshow("", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -101,7 +108,7 @@ while True:
         break
 
 video_capture.release()
-if save_video:
+if args.save_video:
     out.release()
 cv2.destroyAllWindows()
 

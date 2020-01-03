@@ -1,0 +1,1 @@
+python main.py --video_path "/home/fangyu/Downloads/yaoke/avi/test.avi" --ref_path "./ref_features/v1-arcface-emotion-kd/" --model_path "/home/fangyu/fy/face-recognition-benchmarks/IIM/models/v1-arcface-emotion-kd/model,1" --model_type="mxnet" --threshold 0.75 --save_video False
