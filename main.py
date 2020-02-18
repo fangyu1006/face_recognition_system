@@ -10,6 +10,7 @@ import tensorflow as tf
 
 from mtcnn_detector import MtcnnDetector
 from classifier import Resnet20
+from landmark_dan import landmarkDan
 import face_preprocess
 from utils import draw_txt_image
 import argparse
@@ -21,12 +22,13 @@ sys.setdefaultencoding('utf8')
 def parse_args():
     parser = argparse.ArgumentParser(description="face recognition system")
     parser.add_argument('--video_path', type=str, default='./test.avi', help='tested video path')
-    parser.add_argument('--ref_path', type=str, default='./ref_features/r18-arcface-emore/', help='registered images feature path')
-    parser.add_argument('--model_path', type=str, default='./models/r18-arcface-emore/model,1', help='tested model path')
+    parser.add_argument('--ref_path', type=str, default='./ref_features/r18-arcface-deepglint32/', help='registered images feature path')
+    parser.add_argument('--model_path', type=str, default='./models/r18-arcface-deepglint32/model,1', help='tested model path')
     parser.add_argument('--model_type', type=str, default='mxnet', help='model type, mxnet or tf')
     parser.add_argument('--threshold', type=float, default=0.75, help='score threshold')
     parser.add_argument('--save_video', type=bool, default=False, help='whether to save output video')
     parser.add_argument('--save_path', type=str, default='./videos/output.avi', help='out video save path')
+    parser.add_argument('--landmark', type=str, default='DAN', help='type of landmark estimation, MTCNN of DAN')
 
     args = parser.parse_args()
     return args
@@ -47,8 +49,13 @@ true_name = "章泉_2442章泉_2444章泉_2443章泉_2441"
 ctx = mx.gpu(0)
 detector = MtcnnDetector(model_folder=mtcnn_path, ctx=ctx, num_worker=1, minsize=det_minsize,
                         accurate_landmark=True, threshold=det_threshold)
+if args.landmark is "DAN":
+    landmarkEstimator = landmarkDan("./dan_models/dan.pb", 0.9, "eyeNoseLips")
 recog_classifier = Resnet20(args.model_path, args.ref_path, args.model_type)
-video_capture = cv2.VideoCapture(args.video_path)
+if args.video_path is "0":
+    video_capture = cv2.VideoCapture(0)
+else:
+    video_capture = cv2.VideoCapture(args.video_path)
 det_cnt = 0
 recog_cnt = 0
 error = 0
@@ -70,11 +77,19 @@ while True:
             #print(bboxes)
             
             #print(points)
+            if args.landmark is "DAN":
+                img_bw = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             for i in range(bboxes.shape[0]):
                 det_cnt += 1
                 bbox = bboxes[i, :4]
                 score = bboxes[i, 4]
-                landmark = points[i].reshape((2,5)).T
+                if args.landmark is "DAN":
+                    landmark, l_flag = landmarkEstimator.get_landmarks(img_bw, bbox)
+                    if l_flag is False:
+                        continue
+                else:
+                    landmark = points[i].reshape((2,5)).T
+
                 face = face_preprocess.preprocess(frame, bbox, landmark, image_size=img_size)
                 face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
                 recog_ret, score = recog_classifier.get_recog_result(face,args.threshold)
@@ -88,14 +103,12 @@ while True:
                     frame = draw_txt_image(frame, recog_ret, (int(bbox[0]), int(bbox[1])-50), 40, (0,255,255))
                     #cv2.putText(frame, unicode(recog_ret), (int(bbox[0]), int(bbox[1])-4), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2)
                     cv2.putText(frame,str((score+1)/2), (int(bbox[2]), int(bbox[3])-18), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2)
-        cv2.putText(frame, "recog rate: " + '{:d}'.format(recog_cnt) + "/" + '{:d}'.format(det_cnt), (50, 50),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2) 
-        cv2.putText(frame, "error rate: " + '{:d}'.format(error) + "/" + '{:d}'.format(recog_cnt), (50, 100),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2) 
-            #for i in range(points.shape[0]):
-                #landmark = points[i]
-                #for j in range(len(landmark)/2):
-                    #cv2.circle(frame, (int(landmark[j]), int(landmark[j+5])), 5, (0,255,255))
+            cv2.putText(frame, "recog rate: " + '{:d}'.format(recog_cnt) + "/" + '{:d}'.format(det_cnt), (50, 50),cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2) 
+            #cv2.putText(frame, "error rate: " + '{:d}'.format(error) + "/" + '{:d}'.format(recog_cnt), (50, 100),cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2) 
+            for i in range(bboxes.shape[0]):
+                landmark = points[i]
+                for j in range(len(landmark)/2):
+                    cv2.circle(frame, (int(landmark[j]), int(landmark[j+5])), 5, (0,255,255))
         
         if args.save_video:
             out.write(frame)
